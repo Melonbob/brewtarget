@@ -205,6 +205,14 @@ elseif(WIN32)
    set(installSubDir_data "data")
    set(installSubDir_doc  "doc")
    set(installSubDir_bin  "bin")
+
+elseif(CYGWIN)
+   set(CPACK_INSTALL_PREFIX "")
+
+   set(installSubDir_data "data")
+   set(installSubDir_doc  "doc")
+   set(installSubDir_bin  "bin")
+
 elseif(APPLE)
    #============================================== Mac Install Directories =============================================
    set(installSubDir_data "Contents/Resources")
@@ -257,6 +265,7 @@ include_directories(${repoDir}/src)
 include_directories("${CMAKE_BINARY_DIR}/src") # In case of out-of-source build.
 include_directories("${CMAKE_BINARY_DIR}/QtDesignerPlugins")
 
+
 # GCC-specific flags
 if(NOT ${NO_MESSING_WITH_FLAGS})
    if(CMAKE_COMPILER_IS_GNUCXX)
@@ -296,10 +305,21 @@ if(NOT ${NO_MESSING_WITH_FLAGS})
       set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pipe")
       set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -pipe")
    endif()
+   if(CYGWIN)
+      set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -pipe")
+      set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -pipe")
+   endif()
 endif()
 
 # Windows-specific compilation settings
 if(WIN32)
+   # See https://gcc.gnu.org/onlinedocs/gcc-12.2.0/gcc/Link-Options.html#Link-Options for more on GCC linker options
+   # In theory, this statically links all the GCC and MinGW libraries, so we don't have to ship DLLs for them.  In
+   # practice, it seems we still need a fair few other DLLs.
+   set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++ -static")
+endif()
+
+if(CYGWIN)
    # See https://gcc.gnu.org/onlinedocs/gcc-12.2.0/gcc/Link-Options.html#Link-Options for more on GCC linker options
    # In theory, this statically links all the GCC and MinGW libraries, so we don't have to ship DLLs for them.  In
    # practice, it seems we still need a fair few other DLLs.
@@ -395,7 +415,7 @@ message(STATUS "Doing ${CMAKE_BUILD_TYPE} build (DO_RELEASE_BUILD = ${DO_RELEASE
 #
 # For the moment, max version we can have here is 5.9.5, because that's what Ubuntu 18.04 topped out at
 #
-set(QT5_MIN_VERSION 5.9.5)
+set(QT5_MIN_VERSION 5.9.4)
 
 # Set the AUTOMOC property on all targets.  This tells CMake to automatically handle the Qt Meta-Object Compiler (moc)
 # preprocessor (ie the thing that handles Qt's C++ extensions), without having to use commands such as QT4_WRAP_CPP(),
@@ -625,14 +645,18 @@ find_package(Boost REQUIRED)
 else()
 # TBD Some users report problems getting CMake to find libboost_stacktrace_backtrace on Ubuntu and Gentoo, so disable it
 # for now and fallback to the header-only version
+if(CYGWIN)
 #find_package(Boost REQUIRED COMPONENTS stacktrace_backtrace)
+endif()
 find_package(Boost REQUIRED)
 endif()
 include_directories(${Boost_INCLUDE_DIRS})
 # Uncomment the next two lines if you want to find where Boost headers and DLLs are on your system
 message( "Boost include directories: " ${Boost_INCLUDE_DIRS} )
 message( "Boost libraries: " ${Boost_LIBRARIES} )
-
+###
+### since gcc is POSIX see Easy Build and Install
+### https://www.boost.org/doc/libs/1_81_0/more/getting_started/unix-variants.html#id26 (section 5.1)
 #
 # Extra requirements for Boost Stacktrace
 #
@@ -654,6 +678,10 @@ message( "Boost libraries: " ${Boost_LIBRARIES} )
 # Fortunately, CMake has a special variable, CMAKE_DL_LIBS, that is, essentially "whatever library you need to link to
 # for dlopen and dlclose", so we don't need to worry about libc versions.
 #
+if(CYGWIN)
+   set(Backtrace_LIBRARIES /usr/local/lib)
+   set(Backtrace_LIBRARY /usr/local/lib/libbacktrace.a)
+endif()
 if(NOT WIN32)
    set(DL_LIBRARY ${CMAKE_DL_LIBS})
 endif()
@@ -666,13 +694,18 @@ if(NOT APPLE)
 # for now and fallback to the header-only version
 #      add_compile_definitions(BOOST_STACKTRACE_DYN_LINK)
    endif()
-#   add_compile_definitions(BOOST_STACKTRACE_USE_BACKTRACE)
+   add_compile_definitions(BOOST_STACKTRACE_USE_BACKTRACE)
 endif()
 message("Backtrace libs " ${DL_LIBRARY} " | " ${Backtrace_LIBRARIES} " | " ${Boost_LIBRARIES})
 
 #=================================================== Find Xerces-C++ ===================================================
 # CMake already knows how to find and configure Xerces-C++, see
 # https://cmake.org/cmake/help/latest/module/FindXercesC.html
+if(CYGWIN)
+#   set(XercesC_INCLUDE_DIRS /cygdrive/c/Program\ Files/xerces-c_2_8_0)
+#   set(XercesC_INCLUDE_DIR /cygdrive/c/Program\ Files/xerces-c_2_8_0/include)
+#   set(XercesC_LIBRARY /cygdrive/c/Program\ Files/xerces-c_2_8_0/lib)
+endif()
 find_package(XercesC REQUIRED)
 include_directories(${XercesC_INCLUDE_DIRS})
 # Uncomment the next two lines if you want to find where Xerces headers and DLLs are on your system
@@ -681,6 +714,12 @@ message("Xerces-C++ libraries: ${XercesC_LIBRARIES}")
 
 #==================================================== Find Xalan-C++ ===================================================
 # Same comments apply here as for Xerces above
+if(CYGWIN)
+   set(XalanC_INCLUDE_DIRS /cygdrive/c/Program\ Files/Xalan-C_1_10_0)
+   set(XalanC_LIBRARY /cygdrive/c/Program\ Files/Xalan-C_1_10_0/lib)
+   set(XalanC_VERSION 1.10.0)
+   set(XalanC_INCLUDE_DIR /cygdrive/c/Program\ Files/Xalan-C_1_10_0/include/xalanc)
+endif()
 find_package(XalanC REQUIRED)
 include_directories(${XalanC_INCLUDE_DIRS})
 # Uncomment the next two lines if you want to find where Xalan headers and DLLs are on your system
@@ -696,6 +735,32 @@ endif()
 if(WIN32)
    # This is to detect whether we're using MSYS2 and/or MinGW
    if(WIN32)
+      execute_process(COMMAND uname OUTPUT_VARIABLE uname)
+      message(STATUS "Uname is " ${uname})
+      if(uname MATCHES "^MSYS" OR uname MATCHES "^MINGW")
+         message(STATUS "Running on MSYS/MinGW")
+         set(MINGW true)
+      endif()
+   endif()
+
+   # Find extra MinGW-specific dlls.
+   if(MINGW)
+      if(NOT MINGW_BIN_DIR)
+         # Yes, it's mingw32-make.exe even on 64-bit systems
+         FIND_PATH(MINGW_BIN_DIR "mingw32-make.exe")
+      endif()
+      if(NOT EXISTS ${MINGW_BIN_DIR})
+         message(FATAL_ERROR "MinGW bin dir not found. Run cmake again with the option -DMINGW_BIN_DIR=c:/path/to/mingw/bin")
+      else()
+         get_filename_component(Mingw_Path ${CMAKE_CXX_COMPILER} PATH)
+      endif()
+      message(STATUS "MINGW_BIN_DIR " ${MINGW_BIN_DIR})
+   endif()
+endif()
+
+if(CYGWIN)
+   # This is to detect whether we're using MSYS2 and/or MinGW
+   if(CYGWIN)
       execute_process(COMMAND uname OUTPUT_VARIABLE uname)
       message(STATUS "Uname is " ${uname})
       if(uname MATCHES "^MSYS" OR uname MATCHES "^MINGW")
@@ -902,6 +967,18 @@ elseif(WIN32)
   set(desktopIcon ${filesToInstall_windowsIcon})
 endif()
 
+if(CYGWIN AND MINGW)
+  add_custom_command(OUTPUT ${CMAKE_BINARY_DIR}/src/icon.o
+                     COMMAND windres.exe -I${CMAKE_CURRENT_SOURCE_DIR}
+                     -i${filesToInstall_windowsIcon}
+                     -o${CMAKE_BINARY_DIR}/src/icon.o
+                     DEPENDS ${filesToInstall_windowsIcon}
+  )
+  set(desktopIcon ${CMAKE_BINARY_DIR}/src/icon.o)
+elseif(CYGWIN)
+  set(desktopIcon ${filesToInstall_windowsIcon})
+endif()
+
 #===========================File ownership==================================
 #
 # When you do "make install", the last thing CMake does is generate a file called install_manifest.txt in the build
@@ -1017,6 +1094,99 @@ endif()
 #=======================================================================================================================
 # Windows-specific library linking
 if(WIN32 AND MINGW)
+   ############################################################################
+   # Need to set some linker flags that I don't know how to get
+   # automatically.
+   ############################################################################
+
+   # MinGW-specific flags.
+   #    -Wl,-subsystem,windows - suppresses the output command window.
+   #    -Wl,-enable-stdcall-fixup - If the link finds a symbol that it cannot resolve, it will attempt to do “fuzzy
+   #                                linking” by looking for another defined symbol that differs only in the format of
+   #                                the symbol name (cdecl vs stdcall) and will resolve that symbol by linking to the
+   #                                match (and also print a warning).
+   #    -Wl,-enable-auto-import - Do sophisticated linking of _symbol to __imp__symbol for DATA imports from DLLs, and
+   #                              create the necessary thunking symbols when building the import libraries with those
+   #                              DATA exports.
+   #    -Wl,-enable-runtime-pseudo-reloc - Fixes some of the problems that can occur with -enable-auto-import
+   #    -mthreads - specifies that MinGW-specific thread support is to be used
+   set_target_properties(
+      ${fileName_executable}
+      PROPERTIES
+      LINK_FLAGS "-Wl,-enable-stdcall-fixup -Wl,-enable-auto-import -Wl,-enable-runtime-pseudo-reloc -mthreads -Wl,-subsystem,windows"
+   )
+
+   # This is from https://stackoverflow.com/questions/41193584/deploy-all-qt-dependencies-when-building
+   if(TARGET Qt5::windeployqt)
+      # First, execute windeployqt in a temporary directory after the build to create the directory structure and files
+      # that Qt needs on Windows...
+      add_custom_command(TARGET ${fileName_executable}
+         POST_BUILD
+         COMMAND ${CMAKE_COMMAND} -E remove_directory "${CMAKE_CURRENT_BINARY_DIR}/windeployqt"
+         COMMAND Qt5::windeployqt --dir "${CMAKE_CURRENT_BINARY_DIR}/windeployqt" --no-translations --compiler-runtime "$<TARGET_FILE_DIR:${fileName_executable}>/$<TARGET_FILE_NAME:${fileName_executable}>"
+      )
+
+      # ...then we copy that directory tree to (a) the installation directory (when "make install" is run) and (b)
+      # the directory where we run the test executable (straight away)
+      install(DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/windeployqt/" DESTINATION bin)
+      add_custom_target(
+         copy-runtime-files ALL
+         COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_BINARY_DIR}/windeployqt/" "${CMAKE_BINARY_DIR}/bin"
+         DEPENDS ${fileName_executable}
+      )
+   endif()
+elseif(APPLE)
+   #
+   # We want to achieve the same goal as with Qt5::windeployqt above, but note that the Qt5::macdeployqt functions
+   # rather differently, with different options, so our CMake code here is correspondingly different
+   #
+   # Note that although macdeployqt can create the disk image file, we do that part with CPack to be consistent with our
+   # approach to packaging on other platforms
+   #
+   # Using the MACOSX_BUNDLE paramater on add_executable() above will have created a directory tree akin to the
+   # following:
+   #
+   #    ${fileName_executable}.app   # Top level folder that the desktop user sees as "the application"
+   #    └── Contents
+   #        ├── Info.plist
+   #        ├── MacOS
+   #        │   └── ${fileName_executable}    # The main executable
+   #        └──  Resources
+   #            ├── en.lproj
+   #            ├── sounds
+   #            └── translations_qm
+   #
+   # Running macdeployqt will add "Frameworks" and "Plugins" directory trees inside the "Contents" directory, and
+   # populate these with the various Qt shared libraries etc (including database drivers) needed for the code to run.
+   # It will also copy some, but not all, of the other shared libraries we need.
+   #
+   # We still need to:
+   #    - Copy across some non-Qt libraries we need (part of Xalan that macdeployqt does not detect)
+   #    - Copy sound files into Contents/Resources/sounds and translation files into Contents/Resources/translations_qm
+   #    - Copy default DB and default data into Contents/Resources (which is also where the user manual lives for
+   #      Brewtarget)
+   # The last two should happen courtesy of the set_source_files_properties(... MACOSX_PACKAGE_LOCATION ...) commands
+   # above.  (They won't show up in the diagnostic here because that copying happens _after_ building the executable.
+   #
+   if(TARGET Qt5::macdeployqt)
+      # Note that macdeployqt needs any options flags to be _after_ the name of the app.  The only flag we use is:
+      #   -verbose=<0-3>   0 = no output, 1 = error/warning (default), 2 = normal, 3 = debug
+      add_custom_command(TARGET ${fileName_executable}
+         POST_BUILD
+         # Uncomment the  echo  and  tree  lines to provide extra diagnostics.  These are useful eg if you don't own a
+         # Mac, and are relying on GitHub actions to do Mac builds.  (Just make sure  tree  is installed, usually via
+         # brew install tree.
+#         COMMAND echo "Contents of ${fileName_executable}.app before running macdeployqt"
+#         COMMAND tree -sh ${fileName_executable}.app
+         COMMAND Qt5::macdeployqt "$<TARGET_FILE_NAME:${fileName_executable}>.app" -verbose=2
+#         COMMAND echo "Contents of ${fileName_executable}.app after running macdeployqt"
+#         COMMAND tree -sh ${fileName_executable}.app
+         WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+      )
+   endif()
+endif()
+
+if(CYGWIN AND MINGW)
    ############################################################################
    # Need to set some linker flags that I don't know how to get
    # automatically.
@@ -1501,6 +1671,108 @@ elseif(APPLE)
       verify_app("${CMAKE_BINARY_DIR}/${fileName_executable}.app")
    ]] installCode)
    install(CODE "${installCode}")
+elseif(CYGWIN)
+   #
+   # Shared libraries (DLLs) are a bit complicated on Windows.  Because there is not really a standard package
+   # management system, we can't easily just say "we require libraries X, Y and Z".  Instead, we need to ship said
+   # libraries in the same directory as our application's executable.
+   #
+   # (Of course, if you're just running on the same machine where you built the software, you could simply set the PATH
+   # variable to include all the directories where the DLLs are.  But, in the general case, we're trying to create a
+   # package that does not require people to have pre-installed Qt, Xerces, Xalan, etc.)
+   #
+   # In theory, CMake can work out what DLLs we need and thereby generate a list of files that we need to ensure are
+   # copied as part of the install/packaging.  In practice, everything seems to be a bit more complicated.
+   #
+   # See https://cmake.org/cmake/help/latest/manual/cmake-generator-expressions.7.html#genex:TARGET_RUNTIME_DLLS
+   # (This replaces use of GET_RUNTIME_DEPENDENCIES which I just could not get to work correctly, despite following all
+   # sorts of helpful advice at
+   # https://stackoverflow.com/questions/62884439/how-to-use-cmake-file-get-runtime-dependencies-in-an-install-statement
+   # I always hit a "Failed to start objdump" error.)
+   #
+   # Note, however that this does not find all the DLLs we need.  Perhaps this is related to the mention in the CMake
+   # doco that "Many Find Modules produce imported targets with the UNKNOWN type and therefore will be ignored."
+   #
+   add_custom_command(
+      TARGET ${fileName_executable} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_RUNTIME_DLLS:brewtarget> $<TARGET_FILE_DIR:brewtarget>
+      COMMAND_EXPAND_LISTS
+   )
+
+   #
+   # On MSYS2/MinGW, static libraries (including .dll.a files) live in /mingw64/lib (usually = C:/msys64/mingw64/lib/)
+   # and dynamically linked libraries (aka DLLs) live in /mingw64/bin (usually = C:/msys64/mingw64/bin/).
+   #
+   # First, we do a bit of a hack to get to the bin directory from the lib one, without hard-coding either (in case
+   # your 64-bit instance of MSYS2 is not installed at C:/msys64/).  XercesC_LIBRARIES will be the .dll.a file for
+   # Xerces.  Usually only one library for Xerces, but we take first in the list in case.
+   #
+   list(GET XercesC_LIBRARIES 0 xercesFirstLibrary)
+   get_filename_component(staticLibDir ${xercesFirstLibrary} DIRECTORY)
+   set(dynamicLibDir ${staticLibDir}/../bin)
+   message(STATUS "dynamicLibDir=" ${dynamicLibDir})
+
+   #
+   # Now, for each static library (/mingw64/lib/BlahBlah.dll.a) we know about, we get the corresponding dynamic one
+   # (/mingw64/bin/BlahBlah.dll) and copy it into the same directory as the .exe file.
+   #
+   # Just to make our lives fun, sometimes the static and dynamic versions of the library will have slightly different
+   # naming conventions.  Eg, for Xalan, we have:
+   #    /mingw64/bin/libxalan-c.dll
+   #    /mingw64/lib/libxalan-c.dll.a
+   # But for Xerces, we have:
+   #    /mingw64/lib/libxerces-c.dll.a
+   #    /mingw64/bin/libxerces-c-3-2.dll
+   # Hence the extra '*' in the glob expression below.
+   #
+   # Finally, note that, to make debugging more interesting, the message command below outputs during "make" rather
+   # than during "make install".
+   #
+   foreach(staticLib IN LISTS XercesC_LIBRARIES XalanC_LIBRARIES)
+      get_filename_component(libBaseName ${staticLib} NAME_WE)
+      file(GLOB dynamicallyLinkedLibrary ${dynamicLibDir}/${libBaseName}*.dll)
+      message(STATUS "Install will copy DLL ${dynamicallyLinkedLibrary} to ${installSubDir_bin}")
+      install(FILES ${dynamicallyLinkedLibrary} DESTINATION ${installSubDir_bin})
+   endforeach()
+
+   #
+   # Now, because we're also not assuming that the person running the code will have MSYS2/MinGW installed, we need to
+   # include the DLLs that ship with them and get pulled in by GCC.  I am hoping to find a less manual way of doing this
+   # but have not yet hit paydirt.
+   #
+   set(msys2Dlls
+      libbrotli
+      libbz2
+      libdouble-conversion
+      libfreetype
+      libglib
+      libgraphite
+      libharfbuzz
+      libiconv
+      libintl
+      libmd4c
+      libpcre
+      libpng16
+      libsqlite3    # You need this IN ADDITION to bin/sqldrivers/qsqlite.dll, which gets installed by windeployqt
+      libxalanMsg
+      libzstd
+      zlib1
+   )
+   foreach(dynamicLib IN LISTS msys2Dlls)
+      file(GLOB dynamicallyLinkedLibrary ${dynamicLibDir}/${dynamicLib}*.dll)
+      message(STATUS "Install will also copy DLL ${dynamicallyLinkedLibrary} to ${installSubDir_bin}")
+      install(FILES ${dynamicallyLinkedLibrary} DESTINATION ${installSubDir_bin})
+   endforeach()
+
+   # These are something to do with International Components for Unicode
+   message(STATUS "Install will copy ${IcuDlls} to ${installSubDir_bin}")
+   install(FILES ${IcuDlls} DESTINATION ${installSubDir_bin})
+
+   add_custom_command(
+      TARGET ${fileName_executable} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_FILE:Qt5::Widgets> $<TARGET_FILE_DIR:brewtarget>
+   )
+
 endif()
 
 # Install the translations.
@@ -1753,6 +2025,46 @@ if(UNIX AND NOT APPLE)
                                "%ignore /usr/local/share"
                                "%ignore /usr/local/share/applications")
 elseif(WIN32)
+   #================================================ Windows Packaging =================================================
+   # http://www.thegigsite.com/cmake-2.6.0/CMakeCPackOptions.cmake
+   set(CPACK_GENERATOR "NSIS")
+
+   # The title displayed at the top of the installer.
+   set(CPACK_NSIS_PACKAGE_NAME "${capitalisedProjectName}-${PROJECT_VERSION}")
+   # The display name string that appears in the Windows Apps & features in Control Panel
+   set(CPACK_NSIS_DISPLAY_NAME "${capitalisedProjectName}-${PROJECT_VERSION}")
+   # ?
+   set(CPACK_PACKAGE_INSTALL_REGISTRY_KEY "${capitalisedProjectName}-${PROJECT_VERSION}")
+   # URL to a web site providing more information about your application
+   set(CPACK_NSIS_URL_INFO_ABOUT "https://github.com/Brewtarget/brewtarget")
+   # The name of a *.ico file used as the main icon for the generated install program
+   set(CPACK_NSIS_MUI_ICON ${repoDir}/win/BrewtargetIcon_96.ico)
+
+   # Lists each of the executables and associated text label to be used to create Start Menu shortcuts.
+   # For example, setting this to the list ccmake;CMake would create a shortcut named "CMake" that would execute the
+   # installed executable ccmake.
+   set(CPACK_PACKAGE_EXECUTABLES "${fileName_executable};${capitalisedProjectName}")
+
+   # List of desktop links to create. Each desktop link requires a corresponding start menu shortcut as created by
+   # CPACK_PACKAGE_EXECUTABLES.
+   set(CPACK_CREATE_DESKTOP_LINKS ${fileName_executable})
+
+   # In theory CMake should work out for itself which tool to use for dependency resolution.  In practice, on Windows,
+   # it seems there are issues.  In an MSYS2/MinGW environment we want to use objdump rather than the Visual Studio
+   # dumpbin.
+   #
+   # .:TBD:. This is not sufficient to get objdump used...
+   set(CMAKE_OBJDUMP "objdump")
+   set(CMAKE_GET_RUNTIME_DEPENDENCIES_TOOL objdump)
+   set(CMAKE_GET_RUNTIME_DEPENDENCIES_COMMAND /usr/bin/objdump)
+
+   message(STATUS "CMAKE_GET_RUNTIME_DEPENDENCIES_PLATFORM is " ${CMAKE_GET_RUNTIME_DEPENDENCIES_PLATFORM})
+   message(STATUS "CMAKE_GET_RUNTIME_DEPENDENCIES_TOOL is "     ${CMAKE_GET_RUNTIME_DEPENDENCIES_TOOL})
+   message(STATUS "CMAKE_GET_RUNTIME_DEPENDENCIES_COMMAND is "  ${CMAKE_GET_RUNTIME_DEPENDENCIES_COMMAND})
+
+   set(CPACK_NSIS_MODIFY_PATH ON)
+
+elseif(CYGWIN)
    #================================================ Windows Packaging =================================================
    # http://www.thegigsite.com/cmake-2.6.0/CMakeCPackOptions.cmake
    set(CPACK_GENERATOR "NSIS")
